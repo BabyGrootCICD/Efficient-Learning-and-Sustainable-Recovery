@@ -1,0 +1,439 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version (e.g. 0.1.0 or v0.1.0)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  APP_DIR: app
+  NODE_VERSION: lts/*
+
+jobs:
+  build-dmg:
+    name: macOS DMG (Tauri)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          VERSION="${VERSION#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${VERSION}"
+
+      - name: Sync app version
+        shell: bash
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          npm pkg set version="${VERSION}"
+          node -e "
+            const fs = require('fs');
+            const path = 'src-tauri/tauri.conf.json';
+            const conf = JSON.parse(fs.readFileSync(path, 'utf8'));
+            conf.version = process.env.VERSION;
+            fs.writeFileSync(path, JSON.stringify(conf, null, 2) + '\n');
+          " 
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            sed -i '' "s/^version = \".*\"/version = \"${VERSION}\"/" src-tauri/Cargo.toml
+          else
+            sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" src-tauri/Cargo.toml
+          fi
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ env.APP_DIR }}/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.APP_DIR }}/src-tauri
+
+      - name: Install dependencies
+        working-directory: ${{ env.APP_DIR }}
+        run: npm ci
+
+      - name: Build DMG
+        working-directory: ${{ env.APP_DIR }}
+        run: npm run tauri:build:dmg
+
+      - name: Stage DMG artifact
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          DMG=$(find "${{ env.APP_DIR }}/src-tauri/target/release/bundle/dmg" -name '*.dmg' | head -1)
+          mkdir -p dist
+          cp "${DMG}" "dist/systematic-life-${VERSION}-macos.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/systematic-life-${{ steps.version.outputs.version }}-macos.dmg
+          if-no-files-found: error
+
+  build-msi:
+    name: Windows MSI (Tauri)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          VERSION="${VERSION#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${VERSION}"
+
+      - name: Sync app version
+        shell: bash
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          npm pkg set version="${VERSION}"
+          node -e "
+            const fs = require('fs');
+            const path = 'src-tauri/tauri.conf.json';
+            const conf = JSON.parse(fs.readFileSync(path, 'utf8'));
+            conf.version = process.env.VERSION;
+            fs.writeFileSync(path, JSON.stringify(conf, null, 2) + '\n');
+          "
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" src-tauri/Cargo.toml
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ env.APP_DIR }}/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.APP_DIR }}/src-tauri
+
+      - name: Install dependencies
+        working-directory: ${{ env.APP_DIR }}
+        run: npm ci
+
+      - name: Build MSI
+        working-directory: ${{ env.APP_DIR }}
+        run: npm run tauri:build:msi
+
+      - name: Stage MSI artifact
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          MSI=$(find "${{ env.APP_DIR }}/src-tauri/target/release/bundle/msi" -name '*.msi' | head -1)
+          mkdir -p dist
+          cp "${MSI}" "dist/systematic-life-${VERSION}-windows.msi"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-msi
+          path: dist/systematic-life-${{ steps.version.outputs.version }}-windows.msi
+          if-no-files-found: error
+
+  build-apk:
+    name: Android APK (Capacitor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          VERSION="${VERSION#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${VERSION}"
+
+      - name: Sync app version
+        working-directory: ${{ env.APP_DIR }}
+        run: npm pkg set version="${{ steps.version.outputs.version }}"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ env.APP_DIR }}/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        working-directory: ${{ env.APP_DIR }}
+        run: npm ci
+
+      - name: Build static web assets
+        working-directory: ${{ env.APP_DIR }}
+        run: npm run build:ci
+
+      - name: Add Android platform
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          if [ ! -d android ]; then
+            npm run cap:add:android
+          fi
+
+      - name: Sync Capacitor Android
+        working-directory: ${{ env.APP_DIR }}
+        run: npx cap sync android
+
+      - name: Decode Android keystore
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        shell: bash
+        working-directory: ${{ env.APP_DIR }}/android
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > release.keystore
+
+      - name: Build signed release APK
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        working-directory: ${{ env.APP_DIR }}/android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=release.keystore \
+            -Pandroid.injected.signing.store.password="$ANDROID_KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$ANDROID_KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$ANDROID_KEY_PASSWORD"
+
+      - name: Build unsigned debug APK (MVP fallback)
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 == '' }}
+        working-directory: ${{ env.APP_DIR }}
+        run: npm run android:build:debug
+
+      - name: Stage APK artifact
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          mkdir -p dist
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            APK=$(find "${{ env.APP_DIR }}/android/app/build/outputs/apk/release" -name '*.apk' | head -1)
+            cp "${APK}" "dist/systematic-life-${VERSION}-android-release.apk"
+          else
+            APK=$(find "${{ env.APP_DIR }}/android/app/build/outputs/apk/debug" -name '*.apk' | head -1)
+            cp "${APK}" "dist/systematic-life-${VERSION}-android-debug.apk"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: dist/systematic-life-${{ steps.version.outputs.version }}-android-*.apk
+          if-no-files-found: error
+
+  build-ipa:
+    name: iOS IPA (Capacitor)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          VERSION="${VERSION#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${VERSION}"
+
+      - name: Sync app version
+        working-directory: ${{ env.APP_DIR }}
+        run: npm pkg set version="${{ steps.version.outputs.version }}"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ env.APP_DIR }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ env.APP_DIR }}
+        run: npm ci
+
+      - name: Build static web assets
+        working-directory: ${{ env.APP_DIR }}
+        run: npm run build:ci
+
+      - name: Add iOS platform
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          if [ ! -d ios ]; then
+            npm run cap:add:ios
+          fi
+
+      - name: Sync Capacitor iOS
+        working-directory: ${{ env.APP_DIR }}
+        run: npx cap sync ios
+
+      - name: Install CocoaPods
+        working-directory: ${{ env.APP_DIR }}/ios/App
+        run: pod install
+
+      - name: Import Apple signing certificate
+        if: ${{ secrets.APPLE_CERTIFICATE_BASE64 != '' }}
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          security create-keychain -p "" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "" "$KEYCHAIN_PATH"
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN_PATH"
+
+      - name: Install provisioning profile
+        if: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 != '' }}
+        env:
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+
+      - name: Build signed IPA
+        if: ${{ secrets.APPLE_CERTIFICATE_BASE64 != '' && secrets.IOS_PROVISIONING_PROFILE_BASE64 != '' }}
+        working-directory: ${{ env.APP_DIR }}/ios/App
+        env:
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+          IOS_BUNDLE_ID: life.systematic.app
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath $RUNNER_TEMP/App.xcarchive \
+            archive \
+            DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="profile" \
+            PRODUCT_BUNDLE_IDENTIFIER="$IOS_BUNDLE_ID"
+          xcodebuild \
+            -exportArchive \
+            -archivePath $RUNNER_TEMP/App.xcarchive \
+            -exportPath $RUNNER_TEMP/ipa \
+            -exportOptionsPlist <(cat <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store</string>
+            <key>teamID</key>
+            <string>${IOS_TEAM_ID}</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>${IOS_BUNDLE_ID}</key>
+              <string>profile</string>
+            </dict>
+          </dict>
+          </plist>
+          EOF
+          )
+
+      - name: Build unsigned IPA (MVP fallback)
+        if: ${{ secrets.APPLE_CERTIFICATE_BASE64 == '' || secrets.IOS_PROVISIONING_PROFILE_BASE64 == '' }}
+        working-directory: ${{ env.APP_DIR }}/ios/App
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath $RUNNER_TEMP/DerivedData \
+            build \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+          APP_PATH=$(find "$RUNNER_TEMP/DerivedData" -name 'App.app' -type d | head -1)
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP" && zip -qr App.ipa Payload
+
+      - name: Stage IPA artifact
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          mkdir -p dist
+          if [ -n "${{ secrets.APPLE_CERTIFICATE_BASE64 }}" ] && [ -n "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" ]; then
+            IPA=$(find "$RUNNER_TEMP/ipa" -name '*.ipa' | head -1)
+            cp "${IPA}" "dist/systematic-life-${VERSION}-ios-release.ipa"
+          else
+            cp "$RUNNER_TEMP/App.ipa" "dist/systematic-life-${VERSION}-ios-unsigned.ipa"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: dist/systematic-life-${{ steps.version.outputs.version }}-ios-*.ipa
+          if-no-files-found: error
+
+  publish-release:
+    name: Attach artifacts to GitHub Release
+    needs: [build-dmg, build-msi, build-apk, build-ipa]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: List release artifacts
+        run: find release-artifacts -type f
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: release-artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

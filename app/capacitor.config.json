@@ -1,0 +1,8 @@
+{
+  "appId": "life.systematic.app",
+  "appName": "Systematic Life",
+  "webDir": "out",
+  "server": {
+    "androidScheme": "https"
+  }
+}

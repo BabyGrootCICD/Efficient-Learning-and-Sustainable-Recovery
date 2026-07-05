@@ -1,0 +1,12 @@
+node_modules/
+.next/
+out/
+dist/
+*.local
+.env
+.env.*
+.DS_Store
+src-tauri/target/
+ios/
+android/
+*.log

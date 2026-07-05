@@ -62,6 +62,8 @@ git push origin v0.1.0
 
 未設定時，Android 產生 **debug APK**、iOS 產生 **unsigned IPA**（無法上架或安裝至實機）。
 
+CI 會在 `build-apk` / `build-ipa` job 開頭以偵測步驟檢查 secrets 是否已設定，再決定走簽章或 fallback 建置路徑（GitHub Actions 不允許在 `if:` 條件中直接引用 `secrets`）。
+
 | Secret | 用途 |
 |--------|------|
 | `ANDROID_KEYSTORE_BASE64` | Android keystore（base64） |

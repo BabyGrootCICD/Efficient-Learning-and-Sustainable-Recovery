@@ -73,7 +73,9 @@ Workflow 位於 [`.github/workflows/release.yml`](../.github/workflows/release.y
 
 ### 簽章 Secrets（選用，MVP 可不設定）
 
-在 repository **Settings → Secrets and variables → Actions** 新增：
+在 repository **Settings → Secrets and variables → Actions** 新增。
+
+Workflow 會先執行偵測步驟：Android 檢查 `ANDROID_KEYSTORE_BASE64` 是否存在；iOS 需同時具備 `APPLE_CERTIFICATE_BASE64` 與 `IOS_PROVISIONING_PROFILE_BASE64` 才會走簽章建置。偵測結果以 step output 控制後續步驟，避免在 `if:` 條件中直接引用 secrets。
 
 **Android（正式 release APK）**
 

@@ -191,12 +191,6 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ env.APP_DIR }}/package-lock.json
 
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-          cache: gradle
-
       - uses: android-actions/setup-android@v3
 
       - name: Install dependencies
@@ -217,6 +211,15 @@ jobs:
       - name: Sync Capacitor Android
         working-directory: ${{ env.APP_DIR }}
         run: npx cap sync android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+          cache-dependency-path: |
+            ${{ env.APP_DIR }}/android/*.gradle*
+            ${{ env.APP_DIR }}/android/**/gradle-wrapper.properties
 
       - name: Detect Android signing
         id: android_signing

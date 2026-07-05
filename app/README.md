@@ -31,7 +31,7 @@ npm start
 
 ```bash
 npm install
-BUILD_STATIC=true npm run build
+npm run build:static
 npm run tauri:build
 ```
 
@@ -40,7 +40,7 @@ npm run tauri:build
 ## 行動版（Capacitor — iOS / Android）
 
 ```bash
-BUILD_STATIC=true npm run build
+npm run build:static
 npx cap add ios      # 首次
 npx cap add android  # 首次
 npm run cap:sync
@@ -58,10 +58,10 @@ Workflow 位於 [`.github/workflows/release.yml`](../.github/workflows/release.y
 | `release: published` | 建立 GitHub Release 後自動建置四平台產物並附加至 Release |
 | `workflow_dispatch` | 於 Actions 手動執行，需提供 `version` 輸入（如 `0.1.0`） |
 
-建置流程會先執行 `BUILD_STATIC=true npm run build` 產生 `out/`，再分別：
+建置流程會先執行 `npm run build:static`（跨平台靜態匯出）產生 `out/`，再分別：
 
 - **Tauri**（`macos-latest` / `windows-latest`）：`npm run tauri:build:dmg` 或 `tauri:build:msi`
-- **Capacitor Android**（`ubuntu-latest`）：`cap add android` → `cap sync` → Gradle APK
+- **Capacitor Android**（`ubuntu-latest`）：`cap add android` → `cap sync` → `setup-java`（Gradle cache）→ APK
 - **Capacitor iOS**（`macos-latest`）：`cap add ios` → `cap sync` → `xcodebuild` IPA
 
 ### 預期產物檔名
@@ -108,7 +108,8 @@ DMG / MSI 預設為未 notarize / 未 code sign 的 release 建置。macOS notar
 ### 本地 npm scripts（CI 對應）
 
 ```bash
-npm run build:ci          # BUILD_STATIC=true npm run build
+npm run build:static      # 跨平台靜態匯出（Windows / macOS / Linux）
+npm run build:ci          # CI 別名，等同 build:static
 npm run tauri:build:dmg   # macOS DMG
 npm run tauri:build:msi   # Windows MSI
 npm run android:build:debug    # 無簽章 debug APK

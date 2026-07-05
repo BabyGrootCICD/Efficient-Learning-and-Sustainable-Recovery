@@ -16,6 +16,7 @@
     "tauri:build": "tauri build",
     "tauri:build:dmg": "tauri build --bundles dmg",
     "tauri:build:msi": "tauri build --bundles msi",
+    "tauri:validate-icons": "node scripts/validate-tauri-icons.mjs",
     "cap:sync": "npx cap sync",
     "cap:add:ios": "npx cap add ios",
     "cap:add:android": "npx cap add android",

@@ -74,6 +74,10 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         run: npm ci
 
+      - name: Validate Tauri icons
+        working-directory: ${{ env.APP_DIR }}
+        run: npm run tauri:validate-icons
+
       - name: Build DMG
         working-directory: ${{ env.APP_DIR }}
         run: npm run tauri:build:dmg
@@ -143,6 +147,10 @@ jobs:
       - name: Install dependencies
         working-directory: ${{ env.APP_DIR }}
         run: npm ci
+
+      - name: Validate Tauri icons
+        working-directory: ${{ env.APP_DIR }}
+        run: npm run tauri:validate-icons
 
       - name: Build MSI
         working-directory: ${{ env.APP_DIR }}

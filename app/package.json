@@ -55,6 +55,7 @@
     "tinypool": "^2.1.2",
     "@xmldom/xmldom": "^0.9.12",
     "vite": "^7.3.7",
-    "brace-expansion": "^2.1.7"
+    "brace-expansion": "^2.1.7",
+    "browserslist": "^4.28.7"
   }
 }
